@@ -1,8 +1,50 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { cliArchiveTarCommand, newestCliReleaseVersion, parseChecksums } from "./cliRelease.ts";
+import {
+  CLI_RELEASE_BASE_URL_ENV,
+  CLI_RELEASE_REPOSITORY_ENV,
+  cliArchivePlatformKey,
+  cliArchiveTarCommand,
+  cliReleaseBaseUrl,
+  cliReleaseDefaultBaseUrl,
+  cliReleaseIndexPageUrl,
+  cliReleaseRepository,
+  newestCliReleaseVersion,
+  parseChecksums,
+} from "./cliRelease.ts";
 
 describe("cliRelease", () => {
+  it("maps Intel Macs to the darwin-x64 archive", () => {
+    expect(cliArchivePlatformKey("darwin", "x64")).toBe("darwin-x64");
+    expect(cliArchivePlatformKey("darwin", "arm64")).toBe("darwin-arm64");
+  });
+
+  it("reads releases from T3CODE_UPDATE_REPOSITORY when it names a repository", () => {
+    expect(cliReleaseRepository({})).toBe("pingdotgg/t3code");
+    expect(cliReleaseRepository({ [CLI_RELEASE_REPOSITORY_ENV]: " ChyuWei/t3code " })).toBe(
+      "ChyuWei/t3code",
+    );
+    expect(cliReleaseRepository({ [CLI_RELEASE_REPOSITORY_ENV]: "not-a-repository" })).toBe(
+      "pingdotgg/t3code",
+    );
+    expect(cliReleaseIndexPageUrl(2, "ChyuWei/t3code")).toBe(
+      "https://api.github.com/repos/ChyuWei/t3code/releases?per_page=100&page=2",
+    );
+    expect(cliReleaseDefaultBaseUrl("ChyuWei/t3code")).toBe(
+      "https://github.com/ChyuWei/t3code/releases/download",
+    );
+    expect(cliReleaseBaseUrl({})).toBe("https://github.com/pingdotgg/t3code/releases/download");
+    expect(cliReleaseBaseUrl({ [CLI_RELEASE_REPOSITORY_ENV]: "ChyuWei/t3code" })).toBe(
+      "https://github.com/ChyuWei/t3code/releases/download",
+    );
+    expect(
+      cliReleaseBaseUrl({
+        [CLI_RELEASE_REPOSITORY_ENV]: "ChyuWei/t3code",
+        [CLI_RELEASE_BASE_URL_ENV]: " https://mirror.example.com/t3code ",
+      }),
+    ).toBe("https://mirror.example.com/t3code");
+  });
+
   it("parses sha256sum output including binary-mode markers", () => {
     const checksums = parseChecksums(
       [

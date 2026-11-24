@@ -530,7 +530,8 @@ if ! t3_runtime_ready; then
   trap 'rm -rf "$T3_LOCK"' EXIT
 fi
 if ! t3_runtime_ready; then
-  # Keep aligned with CLI_ARCHIVE_PLATFORM_KEYS in packages/shared/src/cliRelease.ts.
+  # Keep aligned with CLI_ARCHIVE_PLATFORM_KEYS in packages/shared/src/cliRelease.ts, minus darwin-x64:
+  # upstream publishes no Intel Mac archive, so a remote Intel Mac cannot install one.
   case "$(uname -s) $(uname -m)" in
     "Darwin arm64") T3_PLATFORM_KEY="darwin-arm64" ;;
     "Linux arm64" | "Linux aarch64") T3_PLATFORM_KEY="linux-arm64" ;;

@@ -1,9 +1,10 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
-  CLI_RELEASE_BASE_URL_ENV,
   CLI_RELEASE_CHANNELS,
-  cliReleaseIndexPageUrl,
+  cliReleaseBaseUrl,
   cliReleaseChannelOf,
+  cliReleaseIndexPageUrl,
+  cliReleaseRepository,
   newestCliReleaseVersion,
   releaseAssetUrl,
   updateFeedFileName,
@@ -77,9 +78,10 @@ export const resolveNewestVersion = Effect.fn("cli.update.resolve_newest")(funct
 ) {
   const httpClient = yield* HttpClient.HttpClient;
   const environment = yield* HostProcess.Environment;
+  const repository = cliReleaseRepository(environment);
   const githubToken = environment.GH_TOKEN?.trim() || environment.GITHUB_TOKEN?.trim() || undefined;
   for (let page = 1; page <= RELEASE_INDEX_MAX_PAGES; page += 1) {
-    const request = HttpClientRequest.get(cliReleaseIndexPageUrl(page)).pipe(
+    const request = HttpClientRequest.get(cliReleaseIndexPageUrl(page, repository)).pipe(
       HttpClientRequest.setHeader("Accept", "application/vnd.github+json"),
     );
     const authenticatedRequest =
@@ -505,7 +507,7 @@ export const runUpdate = Effect.fn("cli.update.run")(function* (input: {
     httpClient,
     platform,
     arch,
-    releaseBaseUrl: mirror?.feedUrl ?? (environment[CLI_RELEASE_BASE_URL_ENV]?.trim() || undefined),
+    releaseBaseUrl: mirror?.feedUrl ?? cliReleaseBaseUrl(environment),
     requirePublishedRelease: mirror !== undefined,
     validate: (runtime) =>
       runStagedServicePreflight({
