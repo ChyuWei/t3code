@@ -9,6 +9,11 @@ name: CLI (Intel Mac)
 # build, so dropping the other platforms there would break publishing. That
 # workflow also skips itself in forks (resolve_commit gates on the upstream
 # repository), so it cannot add cost here.
+#
+# `publish_release` distributes a T3-branded binary. TRADEMARK.md reserves that
+# branding for official distributions; this fork's owner accepts the risk for a
+# personal machine. The release is marked prerelease and unofficial so it does
+# not present itself as official. Keep it that way.
 
 on:
   workflow_dispatch:
@@ -17,6 +22,11 @@ on:
         description: Archive version. Defaults to apps/server/package.json.
         required: false
         type: string
+      publish_release:
+        description: Attach the archive to a release in this fork.
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: cli-darwin-x64-${{ github.ref }}
@@ -31,6 +41,8 @@ jobs:
     # GitHub-hosted Intel. macos-15-intel is the older equivalent.
     runs-on: macos-26-intel
     timeout-minutes: 90
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     env:
       T3CODE_TELEMETRY_CHANNEL: dev
     steps:
@@ -123,3 +135,42 @@ jobs:
           if-no-files-found: error
           # Already gzip; deflating again saves under 2%.
           compression-level: 0
+
+  release:
+    name: Publish unofficial release
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.publish_release }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download CLI archive
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cli-darwin-x64
+          path: release-cli
+
+      # The tag is `v<version>` and the archive ships beside SHA256SUMS, matching
+      # the layout t3 update expects, so a later build can point at this fork.
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          cd release-cli
+          sha256sum ./*.tar.gz > SHA256SUMS
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            notes="Unofficial Intel Mac (x86_64) build from ${GH_REPO}@${SHA:0:7}. Not an official T3 Code distribution, and not affiliated with or endorsed by T3 Tools, Inc. T3 Code and its branding belong to T3 Tools, Inc. (see TRADEMARK.md in the repository). Download the tar.gz, extract it, and run ./t3."
+            gh release create "$tag" \
+              --prerelease \
+              --target "$SHA" \
+              --title "Unofficial Intel Mac CLI ${VERSION}" \
+              --notes "$notes"
+          fi
+          gh release upload "$tag" ./*.tar.gz SHA256SUMS --clobber
