@@ -1,0 +1,125 @@
+name: CLI (Intel Mac)
+
+# Upstream ships no macOS x64 CLI archive because Node's SEA docs list macOS as
+# arm64 only. Building the executable natively on an Intel runner works, so this
+# fork-only workflow produces `t3-<version>-darwin-x64.tar.gz`, laid out exactly
+# like the other platforms' archives.
+#
+# Keep this separate from release.yml: its `release` job needs every desktop
+# build, so dropping the other platforms there would break publishing. That
+# workflow also skips itself in forks (resolve_commit gates on the upstream
+# repository), so it cannot add cost here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Archive version. Defaults to apps/server/package.json.
+        required: false
+        type: string
+
+concurrency:
+  group: cli-darwin-x64-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build darwin-x64 CLI archive
+    # GitHub-hosted Intel. macos-15-intel is the older equivalent.
+    runs-on: macos-26-intel
+    timeout-minutes: 90
+    env:
+      T3CODE_TELEMETRY_CHANNEL: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Vendored references, not build inputs.
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          # Same closure release.yml's build_bundle installs for t3#build and
+          # the build scripts.
+          install-args: --filter=t3... --filter=@t3tools/web... --filter=@t3tools/scripts...
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION:-$(node -p "require('./apps/server/package.json').version")}"
+          # The server bundle reports APP_VERSION; keep it in step with the
+          # archive name or the smoke test's --version check fails.
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build web client
+        run: vp run --filter @t3tools/web build
+
+      # Bundles the server and copies apps/web/dist to apps/server/dist/client,
+      # which the archive ships.
+      - name: Build server
+        run: node apps/server/scripts/cli.ts build --verbose
+
+      - name: Build CLI single-executable
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          targets: x86_64-apple-darwin
+
+      - name: Build resource monitor
+        run: >-
+          cargo build --locked --release
+          --manifest-path native/resource-monitor/Cargo.toml
+          --target x86_64-apple-darwin
+
+      - name: Stage resource monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_dir="$RUNNER_TEMP/cli-resource-monitor/darwin-x64"
+          mkdir -p "$target_dir"
+          cp native/resource-monitor/target/x86_64-apple-darwin/release/t3-resource-monitor \
+            "$target_dir/t3-resource-monitor"
+
+      # Signs ad hoc when no Developer ID is configured, which is enough for a
+      # locally downloaded archive (no quarantine attribute via `gh run download`).
+      - name: Build CLI archive
+        run: |
+          set -euo pipefail
+          node scripts/build-cli-archive.ts \
+            --platform mac \
+            --arch x64 \
+            --version "${{ steps.version.outputs.version }}" \
+            --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" \
+            --output-dir release-cli
+
+      # Extracts the archive, runs --version and the service launcher from it,
+      # then serves it and waits for HTTP 200.
+      - name: Smoke-test CLI archive
+        run: >-
+          node scripts/smoke-cli-archive.ts
+          --archive release-cli/*
+          --expect-version "${{ steps.version.outputs.version }}"
+
+      - name: Upload CLI archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-darwin-x64
+          path: release-cli/*
+          if-no-files-found: error
+          # Already gzip; deflating again saves under 2%.
+          compression-level: 0
