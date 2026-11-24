@@ -75,6 +75,26 @@ it.effect("authenticates each release page until the requested channel is found"
   }),
 );
 
+it.effect("lists releases from the repository T3CODE_UPDATE_REPOSITORY names", () =>
+  Effect.gen(function* () {
+    const requested: string[] = [];
+    const httpClient = HttpClient.make((request) => {
+      requested.push(new URL(request.url).pathname);
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(request, Response.json([{ tag_name: "v9.9.9" }])),
+      );
+    });
+    const version = yield* resolveNewestVersion("stable").pipe(
+      Effect.provideService(HostProcess.Environment, {
+        T3CODE_UPDATE_REPOSITORY: "ChyuWei/t3code",
+      }),
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+    );
+    assert.equal(version, "9.9.9");
+    assert.deepStrictEqual(requested, ["/repos/ChyuWei/t3code/releases"]);
+  }),
+);
+
 it.effect("reads the newest version from the update feed file a mirror publishes", () =>
   Effect.gen(function* () {
     const requested: string[] = [];

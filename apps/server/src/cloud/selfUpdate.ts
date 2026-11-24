@@ -8,7 +8,6 @@ import {
   type ServerSelfUpdateResult,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -21,7 +20,7 @@ import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/http";
 
 import {
-  CLI_RELEASE_BASE_URL_ENV,
+  cliReleaseBaseUrl,
   cliReleaseChannelOf,
   crossesReleaseTrack,
 } from "@t3tools/shared/cliRelease";
@@ -145,9 +144,8 @@ export const make = Effect.fn("cloud.server_self_update.make")(function* () {
   const arch = yield* HostProcess.Architecture;
   const httpClient = yield* HttpClient.HttpClient;
   const mirror = managedUpdateMirror(policy.document);
-  const releaseBaseUrl =
-    mirror?.feedUrl ??
-    Option.getOrUndefined(yield* Config.String(CLI_RELEASE_BASE_URL_ENV).pipe(Config.option));
+  const environment = yield* HostProcess.Environment;
+  const releaseBaseUrl = mirror?.feedUrl ?? cliReleaseBaseUrl(environment);
   const inFlight = yield* Ref.make(false);
 
   yield* pruneRuntimesOnStart({ baseDir: serverConfig.baseDir, managed: launcher.managed }).pipe(

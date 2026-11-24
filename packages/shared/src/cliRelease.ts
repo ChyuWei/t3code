@@ -3,16 +3,19 @@ import * as Schema from "effect/Schema";
 
 import { compareSemverVersions } from "./semver.ts";
 
-const CLI_RELEASE_REPOSITORY = "pingdotgg/t3code";
+export const CLI_RELEASE_REPOSITORY = "pingdotgg/t3code";
 export const CLI_RELEASES_PAGE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases`;
 export const CLI_RELEASE_CHECKSUMS_FILE = "SHA256SUMS";
 export const CLI_RELEASE_BASE_URL_ENV = "T3CODE_RELEASE_BASE_URL";
+/** `owner/name` of the repository whose releases a fork's build reads, including version discovery. */
+export const CLI_RELEASE_REPOSITORY_ENV = "T3CODE_UPDATE_REPOSITORY";
 
-// Keep archive keys aligned with the Linux matrix, Windows ARM64 build, and cli_archive rows in release.yml,
-// and with the SSH runner's host check in packages/ssh/src/tunnel.ts.
-// Node single-executables do not support darwin-x64 and segfault at startup.
+// Keep archive keys aligned with the Linux matrix, Windows ARM64 build, and cli_archive rows in release.yml.
+// darwin-x64 archives are built by forks on an Intel runner; Node's SEA docs do not test that target,
+// so the SSH runner's host check in packages/ssh/src/tunnel.ts refuses Intel Mac remotes.
 const CLI_ARCHIVE_PLATFORM_KEYS = [
   "darwin-arm64",
+  "darwin-x64",
   "linux-arm64",
   "linux-x64",
   "win32-arm64",
@@ -26,6 +29,24 @@ export function cliArchivePlatformKey(
 ): CliArchivePlatformKey | undefined {
   const key = `${platform}-${arch}`;
   return CLI_ARCHIVE_PLATFORM_KEYS.find((candidate) => candidate === key);
+}
+
+export function cliReleaseRepository(env: Readonly<Record<string, string | undefined>>): string {
+  const value = env[CLI_RELEASE_REPOSITORY_ENV]?.trim();
+  return value !== undefined && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)
+    ? value
+    : CLI_RELEASE_REPOSITORY;
+}
+
+export function cliReleaseDefaultBaseUrl(repository: string = CLI_RELEASE_REPOSITORY): string {
+  return `https://github.com/${repository}/releases/download`;
+}
+
+/** The download base this build reads; `T3CODE_RELEASE_BASE_URL` wins over the configured repository. */
+export function cliReleaseBaseUrl(env: Readonly<Record<string, string | undefined>>): string {
+  return (
+    env[CLI_RELEASE_BASE_URL_ENV]?.trim() || cliReleaseDefaultBaseUrl(cliReleaseRepository(env))
+  );
 }
 
 /** Use System32 bsdtar on Windows; Git-for-Windows GNU tar cannot open zip archives. */
@@ -42,7 +63,7 @@ export function cliArchiveFileName(version: string, platformKey: CliArchivePlatf
   return `t3-${version}-${platformKey}.${platformKey.startsWith("win32") ? "zip" : "tar.gz"}`;
 }
 
-const CLI_RELEASE_DEFAULT_BASE_URL = `https://github.com/${CLI_RELEASE_REPOSITORY}/releases/download`;
+const CLI_RELEASE_DEFAULT_BASE_URL = cliReleaseDefaultBaseUrl();
 
 export function cliReleaseDownloadBaseUrl(
   version: string,
@@ -132,8 +153,11 @@ export function acceptsTrackSwitchRelease(
 }
 
 /** Page until the channel matches; nightlies can push preview/stable releases past the first page. */
-export function cliReleaseIndexPageUrl(page: number): string {
-  return `https://api.github.com/repos/${CLI_RELEASE_REPOSITORY}/releases?per_page=100&page=${page}`;
+export function cliReleaseIndexPageUrl(
+  page: number,
+  repository: string = CLI_RELEASE_REPOSITORY,
+): string {
+  return `https://api.github.com/repos/${repository}/releases?per_page=100&page=${page}`;
 }
 
 /** Draft assets are not downloadable. */
