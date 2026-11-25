@@ -23,6 +23,52 @@
   </a>
 </p>
 
+> [!IMPORTANT]
+> **This is a personal fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code).** It is not
+> an official T3 Code distribution and is not affiliated with or endorsed by T3 Tools, Inc. T3 Code
+> and its branding belong to T3 Tools, Inc. ([TRADEMARK.md](./TRADEMARK.md)). Releases published
+> here are marked prerelease for that reason.
+
+## Changes in this fork
+
+The rest of this README is upstream's. This fork adds:
+
+- **An Intel Mac CLI build.** [`.github/workflows/cli-darwin-x64.yml`](./.github/workflows/cli-darwin-x64.yml)
+  builds `t3-<version>-darwin-x64.tar.gz` on an Intel runner, smoke-tests it, and can publish it
+  as an unofficial prerelease with `SHA256SUMS`.
+- **Updates from this fork.** `t3 update` accepts the `darwin-x64` archive and reads releases from
+  the repository named by `T3CODE_UPDATE_REPOSITORY` (for example `ChyuWei/t3code`), for version
+  discovery and downloads. `T3CODE_RELEASE_BASE_URL` still takes precedence when set.
+- **Opt-in telemetry.** Product usage events are off by default. Set
+  `T3CODE_TELEMETRY_ENABLED=true` before starting the server to send them.
+
+### Build and publish the Intel Mac CLI
+
+1. Open **Actions → CLI (Intel Mac) → Run workflow** on `main`.
+2. Leave `version` empty to use `apps/server/package.json`; keep `publish_release` enabled.
+3. The run builds on `macos-26-intel`, then attaches `t3-<version>-darwin-x64.tar.gz` and
+   `SHA256SUMS` to the `v<version>` release in this fork (prerelease) and uploads the
+   `cli-darwin-x64` artifact.
+
+### Install it on an Intel Mac
+
+```sh
+VER=0.1.11
+T3_HOME="$HOME/.t3"
+mkdir -p "$T3_HOME/runtime/versions" "$HOME/.local/bin"
+
+tar -xzf ~/Downloads/t3-$VER-darwin-x64.tar.gz -C /tmp
+mv /tmp/t3-$VER-darwin-x64 "$T3_HOME/runtime/versions/$VER"
+printf '%s\n' "$VER" > "$T3_HOME/runtime/versions/$VER/.install-complete"
+
+printf '#!/bin/sh\nexec '\''%s'\'' "$@"\n' "$T3_HOME/runtime/versions/$VER/t3" > "$HOME/.local/bin/t3"
+chmod +x "$HOME/.local/bin/t3"
+xattr -dr com.apple.quarantine "$T3_HOME/runtime/versions/$VER" 2>/dev/null || true
+```
+
+Add `~/.local/bin` to `PATH` and export `T3CODE_UPDATE_REPOSITORY=ChyuWei/t3code`, then run `t3`.
+`t3 update` keeps the launcher pointed at the newest installed version.
+
 T3 Code runs the coding agents on your machine and gives them one fast interface. Start a thread at your desk, then approve the next step from your phone.
 
 It works with Claude Code, Codex, Cursor, OpenCode, Grok Build, Antigravity, Kiro, Pi, Muse Code, fx, and any [ACP](./docs/user/providers-acp.md) agent. If an agent is set up on your computer, T3 Code can control it.
