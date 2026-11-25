@@ -38,7 +38,8 @@ The rest of this README is upstream's. This fork adds:
   as an unofficial prerelease with `SHA256SUMS`.
 - **Updates from this fork.** `t3 update` accepts the `darwin-x64` archive and reads releases from
   the repository named by `T3CODE_UPDATE_REPOSITORY` (for example `ChyuWei/t3code`), for version
-  discovery and downloads. `T3CODE_RELEASE_BASE_URL` still takes precedence when set.
+  discovery and downloads. `scripts/install.sh` reads the same variable.
+  `T3CODE_RELEASE_BASE_URL` still takes precedence when set.
 - **Opt-in telemetry.** Product usage events are off by default. Set
   `T3CODE_TELEMETRY_ENABLED=true` before starting the server to send them.
 
@@ -52,22 +53,18 @@ The rest of this README is upstream's. This fork adds:
 
 ### Install it on an Intel Mac
 
+Point the installer at this fork and run it:
+
 ```sh
-VER=0.1.11
-T3_HOME="$HOME/.t3"
-mkdir -p "$T3_HOME/runtime/versions" "$HOME/.local/bin"
-
-tar -xzf ~/Downloads/t3-$VER-darwin-x64.tar.gz -C /tmp
-mv /tmp/t3-$VER-darwin-x64 "$T3_HOME/runtime/versions/$VER"
-printf '%s\n' "$VER" > "$T3_HOME/runtime/versions/$VER/.install-complete"
-
-printf '#!/bin/sh\nexec '\''%s'\'' "$@"\n' "$T3_HOME/runtime/versions/$VER/t3" > "$HOME/.local/bin/t3"
-chmod +x "$HOME/.local/bin/t3"
-xattr -dr com.apple.quarantine "$T3_HOME/runtime/versions/$VER" 2>/dev/null || true
+export T3CODE_UPDATE_REPOSITORY=ChyuWei/t3code
+curl -fsSL https://raw.githubusercontent.com/ChyuWei/t3code/main/scripts/install.sh | sh
 ```
 
-Add `~/.local/bin` to `PATH` and export `T3CODE_UPDATE_REPOSITORY=ChyuWei/t3code`, then run `t3`.
-`t3 update` keeps the launcher pointed at the newest installed version.
+The installer reads version discovery and archives from `T3CODE_UPDATE_REPOSITORY` (default
+`pingdotgg/t3code`), so it finds this fork's `darwin-x64` archive even though every release here is a
+prerelease. Keep the export in your shell profile: `t3 update` reads the same variable. Pin a
+version with `T3CODE_VERSION=0.1.11`, and set `T3CODE_INSTALL_BIN_DIR` if `~/.local/bin` is not on
+your `PATH`.
 
 T3 Code runs the coding agents on your machine and gives them one fast interface. Start a thread at your desk, then approve the next step from your phone.
 

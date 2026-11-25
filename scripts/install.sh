@@ -11,13 +11,15 @@
 #   T3CODE_HOME              T3 home directory (default: ~/.t3)
 #   T3CODE_INSTALL_BIN_DIR   where the `t3` command goes (default: ~/.local/bin)
 #   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
+#   T3CODE_UPDATE_REPOSITORY owner/name of the repository whose releases to read
+#                            (default: pingdotgg/t3code); `t3 update` reads the same variable
 #
 # The archive is unpacked into $T3CODE_HOME/runtime/versions/<version>, the
 # same layout `t3 service install` uses, so the service reuses this download
 # instead of fetching the release again.
 set -eu
 
-repo="pingdotgg/t3code"
+repo="${T3CODE_UPDATE_REPOSITORY:-pingdotgg/t3code}"
 base_url="${T3CODE_RELEASE_BASE_URL:-https://github.com/${repo}/releases/download}"
 t3_home="${T3CODE_HOME:-$HOME/.t3}"
 case "$t3_home" in
@@ -170,7 +172,9 @@ case "$(uname -m)" in
   x86_64 | amd64) arch="x64" ;;
   *) fail "unsupported architecture $(uname -m)" ;;
 esac
-if [ "${platform}-${arch}" = darwin-x64 ]; then
+# Upstream publishes no Intel Mac archive; a fork that does is selected with
+# T3CODE_UPDATE_REPOSITORY and falls through to the release itself.
+if [ "${platform}-${arch}" = darwin-x64 ] && [ "$repo" = "pingdotgg/t3code" ]; then
   fail "there is no t3 CLI for Intel Macs. Install the desktop app from https://t3.codes/download, or run a server from source: https://github.com/${repo}/blob/main/docs/user/install.md#intel-macs"
 fi
 command -v tar >/dev/null 2>&1 || fail "tar is required"
@@ -194,9 +198,11 @@ if [ -z "$version" ]; then
   if [ "$channel" = stable ]; then
     # release.yml marks only plain stable releases latest. This is a github.com
     # page, so it is not cut off by a page of newer nightlies or the API quota.
-    fetch "https://github.com/${repo}/releases/latest" "$tmp_index" application/json
+    # A fork whose releases are all prereleases has no `latest`; page the API then.
+    fetch "https://github.com/${repo}/releases/latest" "$tmp_index" application/json || true
     version="$(sed -n "s/.*\"tag_name\": *\"${tag_pattern}\".*/\1/p" "$tmp_index" | head -n 1)"
-  else
+  fi
+  if [ -z "$version" ]; then
     page=1
     while [ -z "$version" ] && [ "$page" -le 10 ]; do
       fetch "https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}" "$tmp_index"
@@ -349,6 +355,9 @@ launchers="${t3_home}/runtime/launchers"
 grep -qxF "$launcher" "$launchers" 2>/dev/null || printf '%s\n' "$launcher" >> "$launchers"
 if "$interactive"; then printf '\r\033[2K' >&2; fi
 printf '  %sInstalled T3 Code %s%s\n\n' "$green" "$version" "$reset" >&2
+if [ "$repo" != "pingdotgg/t3code" ]; then
+  printf '  Releases come from %s. Export T3CODE_UPDATE_REPOSITORY=%s so t3 update follows them too.\n\n' "$repo" "$repo" >&2
+fi
 # The folder a shell reads its startup file from: $1 when set and safe to paste, else $2 when
 # unset. A set but unsafe folder prints nothing, since the default would never be read.
 read_from() {
