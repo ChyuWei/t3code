@@ -164,7 +164,9 @@ jobs:
           set -euo pipefail
           tag="v${VERSION}"
           cd release-cli
-          sha256sum ./*.tar.gz > SHA256SUMS
+          # Bare names: `./*.tar.gz` would put `./` in SHA256SUMS, which the
+          # installer and t3 update match against the archive's plain name.
+          sha256sum -- *.tar.gz > SHA256SUMS
           if ! gh release view "$tag" >/dev/null 2>&1; then
             notes="Unofficial Intel Mac (x86_64) build from ${GH_REPO}@${SHA:0:7}. Not an official T3 Code distribution, and not affiliated with or endorsed by T3 Tools, Inc. T3 Code and its branding belong to T3 Tools, Inc. (see TRADEMARK.md in the repository). Download the tar.gz, extract it, and run ./t3."
             gh release create "$tag" \
